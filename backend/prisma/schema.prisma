@@ -1,0 +1,236 @@
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "linux-musl-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  OWNER
+  EDITOR
+  VIEWER
+}
+
+enum FieldType {
+  USER
+  DATE
+  TEXT
+  NUMBER
+  SELECT
+  COLOR
+}
+
+model User {
+  id                   String                 @id @default(uuid())
+  telegramId           String?                @unique
+  email                String?                @unique
+  passwordHash         String?
+  name                 String
+  avatarUrl            String?
+  createdAt            DateTime               @default(now())
+  boards               Board[]                @relation("BoardOwner")
+  memberships          BoardMember[]          @relation("BoardMemberUser")
+  notificationSettings NotificationSettings?  @relation("UserNotificationSettings")
+  magicLinks           MagicLink[]            @relation("UserMagicLinks")
+  comments             Comment[]              @relation("CommentAuthor")
+  fieldValueUsers      FieldValueUser[]       @relation("FieldValueUserToUser")
+  createdInviteLinks   InviteLink[]           @relation("InviteLinkCreator")
+}
+
+model NotificationSettings {
+  id         String   @id @default(uuid())
+  userId     String   @unique
+  onAssigned Boolean  @default(true)
+  onDeadline Boolean  @default(true)
+  onComment  Boolean  @default(true)
+  user       User     @relation("UserNotificationSettings", fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model MagicLink {
+  id        String   @id @default(uuid())
+  userId    String
+  token     String   @unique
+  expiresAt DateTime
+  isUsed    Boolean  @default(false)
+  createdAt DateTime @default(now())
+  user      User     @relation("UserMagicLinks", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model Board {
+  id               String            @id @default(uuid())
+  title            String
+  ownerId          String
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  owner            User              @relation("BoardOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  members          BoardMember[]     @relation("BoardMemberBoard")
+  columns          Column[]          @relation("BoardColumns")
+  cards            Card[]            @relation("BoardCards")
+  fieldDefinitions FieldDefinition[] @relation("BoardFieldDefinitions")
+  inviteLinks      InviteLink[]      @relation("BoardInviteLinks")
+  tags             Tag[]             @relation("BoardTags")
+
+  @@index([ownerId])
+}
+
+model BoardMember {
+  id       String   @id @default(uuid())
+  boardId  String
+  userId   String
+  role     Role
+  joinedAt DateTime @default(now())
+  board    Board    @relation("BoardMemberBoard", fields: [boardId], references: [id], onDelete: Cascade)
+  user     User     @relation("BoardMemberUser", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([boardId, userId])
+  @@index([userId])
+}
+
+model InviteLink {
+  id          String   @id @default(uuid())
+  boardId     String
+  token       String   @unique
+  role        Role
+  isRevoked   Boolean  @default(false)
+  createdById String
+  createdAt   DateTime @default(now())
+  board       Board    @relation("BoardInviteLinks", fields: [boardId], references: [id], onDelete: Cascade)
+  createdBy   User     @relation("InviteLinkCreator", fields: [createdById], references: [id], onDelete: Cascade)
+
+  @@index([boardId])
+  @@index([createdById])
+}
+
+model Column {
+  id      String @id @default(uuid())
+  boardId String
+  title   String
+  order   Int
+  board   Board  @relation("BoardColumns", fields: [boardId], references: [id], onDelete: Cascade)
+  cards   Card[] @relation("ColumnCards")
+
+  @@index([boardId, order])
+}
+
+model Card {
+  id          String       @id @default(uuid())
+  columnId    String
+  boardId     String
+  title       String
+  description String?
+  order       Int
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  column      Column       @relation("ColumnCards", fields: [columnId], references: [id], onDelete: Cascade)
+  board       Board        @relation("BoardCards", fields: [boardId], references: [id], onDelete: Cascade)
+  fieldValues FieldValue[] @relation("CardFieldValues")
+  comments    Comment[]    @relation("CardComments")
+  checklists  Checklist[]  @relation("CardChecklists")
+  tags        CardTag[]    @relation("CardToCardTag")
+
+  @@index([columnId, order])
+  @@index([boardId])
+}
+
+model FieldDefinition {
+  id          String       @id @default(uuid())
+  boardId     String
+  name        String
+  type        FieldType
+  isRequired  Boolean      @default(false)
+  options     Json?
+  order       Int
+  deletedAt   DateTime?
+  createdAt   DateTime     @default(now())
+  board       Board        @relation("BoardFieldDefinitions", fields: [boardId], references: [id], onDelete: Cascade)
+  fieldValues FieldValue[] @relation("FieldDefinitionValues")
+
+  @@index([boardId])
+}
+
+model FieldValue {
+  id          String           @id @default(uuid())
+  cardId      String
+  fieldDefId  String
+  valueText   String?
+  valueNumber Float?
+  valueDate   DateTime?
+  card        Card             @relation("CardFieldValues", fields: [cardId], references: [id], onDelete: Cascade)
+  fieldDef    FieldDefinition  @relation("FieldDefinitionValues", fields: [fieldDefId], references: [id], onDelete: Cascade)
+  users       FieldValueUser[] @relation("FieldValueUsers")
+
+  @@unique([cardId, fieldDefId])
+  @@index([fieldDefId])
+}
+
+model FieldValueUser {
+  id           String     @id @default(uuid())
+  fieldValueId String
+  userId       String
+  fieldValue   FieldValue @relation("FieldValueUsers", fields: [fieldValueId], references: [id], onDelete: Cascade)
+  user         User       @relation("FieldValueUserToUser", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([fieldValueId, userId])
+  @@index([userId])
+}
+
+model Comment {
+  id        String   @id @default(uuid())
+  cardId    String
+  authorId  String?
+  text      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  card      Card     @relation("CardComments", fields: [cardId], references: [id], onDelete: Cascade)
+  author    User?    @relation("CommentAuthor", fields: [authorId], references: [id], onDelete: SetNull)
+
+  @@index([cardId])
+  @@index([authorId])
+}
+
+model Checklist {
+  id     String          @id @default(uuid())
+  cardId String
+  title  String
+  card   Card            @relation("CardChecklists", fields: [cardId], references: [id], onDelete: Cascade)
+  items  ChecklistItem[] @relation("ChecklistItems")
+
+  @@index([cardId])
+}
+
+model ChecklistItem {
+  id          String    @id @default(uuid())
+  checklistId String
+  text        String
+  isDone      Boolean   @default(false)
+  order       Int
+  checklist   Checklist @relation("ChecklistItems", fields: [checklistId], references: [id], onDelete: Cascade)
+
+  @@index([checklistId, order])
+}
+
+model Tag {
+  id      String    @id @default(uuid())
+  boardId String
+  name    String
+  color   String
+  board   Board     @relation("BoardTags", fields: [boardId], references: [id], onDelete: Cascade)
+  cards   CardTag[] @relation("TagToCardTag")
+
+  @@index([boardId])
+}
+
+model CardTag {
+  cardId String
+  tagId  String
+  card   Card   @relation("CardToCardTag", fields: [cardId], references: [id], onDelete: Cascade)
+  tag    Tag    @relation("TagToCardTag", fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([cardId, tagId])
+  @@index([tagId])
+}
