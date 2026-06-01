@@ -1,6 +1,6 @@
 server {
   listen 80;
-  server_name iinstasave.uz www.iinstasave.uz;
+  server_name ${DOMAIN} www.${DOMAIN};
 
   location /.well-known/acme-challenge/ {
     root /var/www/certbot;
@@ -13,10 +13,10 @@ server {
 
 server {
   listen 443 ssl;
-  server_name iinstasave.uz www.iinstasave.uz;
+  server_name ${DOMAIN} www.${DOMAIN};
 
-  ssl_certificate /etc/letsencrypt/live/iinstasave.uz/fullchain.pem;
-  ssl_certificate_key /etc/letsencrypt/live/iinstasave.uz/privkey.pem;
+  ssl_certificate /etc/letsencrypt/live/${DOMAIN}/fullchain.pem;
+  ssl_certificate_key /etc/letsencrypt/live/${DOMAIN}/privkey.pem;
 
   client_max_body_size 10m;
 
